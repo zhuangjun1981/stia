@@ -674,6 +674,26 @@ def rigid_transform_cv2(img, zoom=None, rotation=None, offset=None, output_shape
         raise(ValueError, 'Input image is not a 2d or 3d array!')
 
 
+def array_nor_mean_range(arr):
+    """
+    column-wize normalization of an 2-d array by minus mean and divide by range, designed for feature
+    scaling of gradient descent algorithm. each column is a feature, each row is an example
+
+    :param arr: input 2-d array
+    :return: normalized array: normalized array with same shape as input arr
+             ran: 2-d array with shape 1 x n (number of features or number of columns in input arr)
+                  range of each feature
+             mean: 2-d array with shape 1 x n (number of features or number of columns in input arr)
+                   mean of each feature
+             to recover the original array: normalized array * range + mean
+    """
+
+    arr = arr.astype(np.float64)
+    mean = np.array([np.mean(arr, axis=0)])
+    ran = np.array([np.max(arr, axis=0) - np.min(arr, axis=0)])
+
+    return (arr - mean) / ran, ran, mean
+
 
 class Mask(sparse.coo_matrix):
     """

@@ -1,42 +1,6 @@
-import numpy as np
 import matplotlib.pyplot as plt
-
-
-# def array_nor(arr):
-#     """
-#     normalize a np.array to the scale [0, 1]
-#
-#     return normalized array, scale, baseline
-#
-#     to recover the original array: normalized array * cale + baseline
-#     """
-#     a_min = np.amin(arr)
-#     a_max = np.amax(arr)
-#
-#     b = arr.astype(np.float)
-#
-#     return (b - a_min) / (a_max - a_min), (a_max - a_min), arr.min
-
-
-def array_nor_mean_range(arr):
-    """
-    column-wize normalization of an 2-d array by minus mean and divide by range, designed for feature
-    scaling of gradient descent algorithm. each column is a feature, each row is an example
-
-    :param arr: input 2-d array
-    :return: normalized array: normalized array with same shape as input arr
-             ran: 2-d array with shape 1 x n (number of features or number of columns in input arr)
-                  range of each feature
-             mean: 2-d array with shape 1 x n (number of features or number of columns in input arr)
-                   mean of each feature
-             to recover the original array: normalized array * range + mean
-    """
-
-    arr = arr.astype(np.float64)
-    mean = np.array([np.mean(arr, axis=0)])
-    ran = np.array([np.max(arr, axis=0) - np.min(arr, axis=0)])
-
-    return (arr - mean) / ran, ran, mean
+import numpy as np
+from stia.utility.image_analysis import array_nor_mean_range
 
 
 class GradientDescent(object):
@@ -61,12 +25,14 @@ class GradientDescent(object):
     self.reg_lambda: float, regularization coefficient
     """
 
-    def __init__(self, iteration=1000, step=1., reg_lambda=None):
+    def __init__(self, iteration=1000, step=1., is_pass_origin=False, reg_lambda=None):
         """
         input matrices are set as None, please use .set_data() to input the training set.
 
         :param iteration: int, number of iterations
         :param step: float, gradient descent step
+        :param is_pass_origin: bool, default: False. Does the model force to pass origin or not. if True, the first
+                               number of parameters has no meaning.
         :param reg_lambda: float, lambda for simple regularization, if None, no regularization will be
                applied, when applied the update rule will have a regularization term, lambda * theta / m, theta is
                the parameter to fit, m is the total number of parameters
@@ -83,6 +49,7 @@ class GradientDescent(object):
         self.iteration = iteration
         self.step = step
         self.reg_lambda = reg_lambda
+        self.is_pass_origin = is_pass_origin
 
     def __str__(self):
 
@@ -137,6 +104,7 @@ class GradientDescent(object):
         :param start_params: 2-d array, start parameter set, shape: (m + 1) x 1. m is number of input variables. if None
                             start from all zeros. if 1-d array, assume first element is for the intercept and rest
                             elements are coefficients for each input variable.
+
         :return: None
         """
 
@@ -160,9 +128,14 @@ class GradientDescent(object):
             raise ValueError('input mat_x should be either 1-d array or 2-d array.')
 
         x_arr, x_range, x_mean = array_nor_mean_range(x_arr)
-        self.x_arr = np.hstack((np.ones((x_arr.shape[0], 1)), x_arr))
-        self.x_range = np.hstack(([[0.]], x_range))
-        self.x_mean = np.hstack(([[1.]], x_mean))
+        if self.is_pass_origin:
+            self.x_arr = np.hstack((np.zeros((x_arr.shape[0], 1)), x_arr))
+            self.x_range = np.hstack(([[0.]], x_range))
+            self.x_mean = np.hstack(([[0.]], x_mean))
+        else:
+            self.x_arr = np.hstack((np.ones((x_arr.shape[0], 1)), x_arr))
+            self.x_range = np.hstack(([[0.]], x_range))
+            self.x_mean = np.hstack(([[1.]], x_mean))
 
         # self.x_arr, self.x_range, self.x_mean = array_nor_mean_range(x_arr)
 
@@ -236,7 +209,10 @@ class GradientDescent(object):
         """
 
         x_mat = self.get_original_feature_array()
-        x_mat = np.hstack((np.ones((x_mat.shape[0], 1)), x_mat))
+        if self.is_pass_origin:
+            x_mat = np.hstack((np.zeros((x_mat.shape[0], 1)), x_mat))
+        else:
+            x_mat = np.hstack((np.ones((x_mat.shape[0], 1)), x_mat))
         y_mat = self.y_arr
 
         return np.dot(np.dot(np.linalg.pinv(np.dot(x_mat.transpose(), x_mat)), x_mat.transpose()), y_mat).flatten()

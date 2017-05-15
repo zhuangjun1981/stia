@@ -234,13 +234,13 @@ def correct_movie(mov, offset, fill_value=0., verbose=True):
 
 def align_multiple_files_iterate(paths, output_folder=None, is_output_mov=True, iteration=2, max_offset=(10., 10.),
                                  align_func=phase_correlation, fill_value=0., verbose=True, offset_file_name=None,
-                                 mean_projection_file_name=None):
+                                 mean_projections_file_name=None, mean_projection_file_name=None):
 
     """
     Motion correct a list of movie files (currently only support .tif format, designed for ScanImage output files.
     each files will be first aligned to its own mean projection iteratively. for each iteration, the reference
     image (mean projection) will be updated based on the aligned result. Then all files will be aligned based on their
-    final mean projection images.
+    final mean projection images. Designed for movies recorded from ScanImage with dtype int16
 
     all operations will be applied with np.float32 format
 
@@ -258,8 +258,11 @@ def align_multiple_files_iterate(paths, output_folder=None, is_output_mov=True, 
     :param verbose:
     :param offset_file_name: str, the file name of the saved offsets hdf5 file (without extension), if None,
                              default will be 'correction_offsets.hdf5'
+    :param mean_projections_file_name: str, the file name of the saved mean projection image stack (without extension),
+                                       one image for each file, order is same as 'path_list' field in saved offsets 
+                                       hdf5 file. If None, default will be 'corrected_mean_projections'
     :param mean_projection_file_name: str, the file name of the saved mean projection image (without extension), if
-                                      None, default will be 'corrected_mean_projection.tif'
+                                      None, default will be 'corrected_mean_projection'
     :return: offsets, dictionary of correction offsets. Key: path of file; value: list of tuple with correction offsets,
              (height, width)
     """
@@ -294,7 +297,7 @@ def align_multiple_files_iterate(paths, output_folder=None, is_output_mov=True, 
     mean_projections = np.array(mean_projections, dtype=np.float32)
 
     print '\n\nCorrected mean projection images of all files ...'
-    mean_projection_offset, _, final_mean_projection = align_single_chunk_iterate(mean_projections, iteration=iteration,
+    mean_projection_offset, final_mean_projections, _= align_single_chunk_iterate(mean_projections, iteration=iteration,
                                                                                   max_offset=max_offset,
                                                                                   align_func=align_func,
                                                                                   fill_value=fill_value,
@@ -305,6 +308,7 @@ def align_multiple_files_iterate(paths, output_folder=None, is_output_mov=True, 
         h5_file = h5py.File(os.path.join(output_folder, 'correction_offsets.hdf5'))
     else:
         h5_file = h5py.File(os.path.join(output_folder, offset_file_name + '.hdf5'))
+    h5_file.create_dataset('path_list', data=paths)
     offset_dict = {}
     for i in range(len(offsets)):
         curr_offset = offsets[i]
@@ -315,12 +319,22 @@ def align_multiple_files_iterate(paths, output_folder=None, is_output_mov=True, 
         curr_h5_dset.attrs['path'] = str(paths[i])
         curr_h5_dset.attrs['format'] = ['height', 'width']
         offset_dict.update({str(paths[i]):offsets[i]})
+    h5_file.close()
 
     print '\nSaving final mean projection image.'
-    if mean_projection_file_name is None:
-        tf.imsave(os.path.join(output_folder, 'corrected_mean_projection.tif'), final_mean_projection)
+    if mean_projections_file_name is None:
+        tf.imsave(os.path.join(output_folder, 'corrected_mean_projections.tif'),
+                  final_mean_projections.astype(np.float32))
     else:
-        tf.imsave(os.path.join(output_folder, mean_projection_file_name + '.tif'), final_mean_projection)
+        tf.imsave(os.path.join(output_folder, mean_projections_file_name + '.tif'),
+                  final_mean_projections.astype(np.float32))
+
+    if mean_projection_file_name is None:
+        tf.imsave(os.path.join(output_folder, 'corrected_mean_projection.tif'),
+                  np.mean(final_mean_projections, axis=0).astype(np.float32))
+    else:
+        tf.imsave(os.path.join(output_folder, mean_projection_file_name + '.tif'),
+                  np.mean(final_mean_projections, axis=0).astype(np.float32))
 
     if is_output_mov:
         for i, curr_path in enumerate(paths):
@@ -328,15 +342,53 @@ def align_multiple_files_iterate(paths, output_folder=None, is_output_mov=True, 
             curr_mov = tf.imread(curr_path)
             curr_offset = offsets[i]
             curr_corrected_mov = correct_movie(curr_mov, curr_offset, fill_value=fill_value, verbose=verbose)
+
+            try:  # try to write a movie of corrected images
+                if i == 0:
+                    codex = 'XVID'
+                    fourcc = cv2.cv.CV_FOURCC(*codex)
+                    out = cv2.VideoWriter('corrected_movie_' + codex + '.avi', fourcc, 30, (512, 512), isColor=False)
+                    # CLAHE (Contrast Limited Adaptive Histogram Equalization)
+                    # clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+
+                # generate .avi movie of concatenated corrected movies
+                for i, frame in enumerate(curr_corrected_mov):
+                    if i == 0:
+                        stack = [frame]
+
+                    elif i % 20 == 0:
+
+                        # convert to 8-bit gray scale
+                        display_frame = np.mean(stack, axis=0).astype(np.float32)
+                        display_frame = (display_frame - np.amin(display_frame)) / \
+                                        (np.amax(display_frame) - np.amin(display_frame))
+                        display_frame = (display_frame * 255).astype(np.uint8)
+
+                        # # histogram normalization
+                        # display_frame = clahe.apply(display_frame)
+                        display_frame = cv2.equalizeHist(display_frame)
+
+                        # write frame
+                        out.write(display_frame)
+
+                        # clear stack
+                        stack = [frame]
+
+                    else:
+                        stack.append(frame)
+
+            except Exception:
+                pass
+
             _, curr_file_name = os.path.split(curr_path)
             curr_save_name = bas.add_suffix(curr_file_name, '_corrected')
             print 'Saving corrected file: ' + curr_save_name + ' ...'
             tf.imsave(os.path.join(output_folder, curr_save_name), curr_corrected_mov)
 
+    cv2.destroyAllWindows()
+    out.release()
 
-    f = plt.figure(figsize = (10, 10))
-    ax = f.add_subplot(111)
-    ax.imshow(final_mean_projection, cmap='gray', interpolation='nearest')
+    tf.imshow(final_mean_projections, cmap='gray', interpolation='nearest')
     plt.show()
 
     return offset_dict
