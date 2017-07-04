@@ -401,7 +401,7 @@ def resize_image(img, output_shape, fill_value=0.):
             attach_bottom[:] = fill_value
             attach_bottom.astype(img.dtype)
             new_img = np.concatenate((new_img, attach_bottom), axis=1)
-            
+
     else:
         raise(ValueError, 'input image should be a 2-d or 3-d array!')
 
@@ -410,7 +410,7 @@ def resize_image(img, output_shape, fill_value=0.):
 
 def expand_image_cv2(img, fill_value=0.):
     """
-    expand a given image into a square shape, with length of each dimension equals to the length of the diagonal line 
+    expand a given image into a square shape, with length of each dimension equals to the length of the diagonal line
     of the original image
     """
 
@@ -693,6 +693,30 @@ def array_nor_mean_range(arr):
     ran = np.array([np.max(arr, axis=0) - np.min(arr, axis=0)])
 
     return (arr - mean) / ran, ran, mean
+
+
+def downsample_movie(mov, down_sample_rate):
+    """
+    downsample a 3-d matrix along axis 0
+
+    :param mov: 3d array, frame x row x col
+    :param down_sample_rate: positive int, down sample rate along axis 0
+    :return: downsampled movie
+    """
+
+    if len(mov.shape) != 3:
+        raise ValueError('input movie should be 3d.')
+
+    total_frame_num = mov.shape[0]
+    chunk_num = int(total_frame_num // down_sample_rate)
+
+    mov_down = []
+
+    for i in range(chunk_num):
+        chunk = mov[i * down_sample_rate: (i + 1) * down_sample_rate]
+        mov_down.append(np.mean(chunk, axis=0))
+
+    return np.array(mov_down, dtype=mov.dtype)
 
 
 class Mask(sparse.coo_matrix):

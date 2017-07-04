@@ -14,8 +14,8 @@ import utility.signal_processing as sp
 DTYPE = np.uint16
 FRAME_SHAPE = (256, 256) # pixel
 PIXEL_SIZE = (0.5, 0.5) # micron
-TEMPORAL_SAMPLING_RATE = 30.  # Hz
-DURATION = 50. # second
+TEMPORAL_SAMPLING_RATE = 31.  # Hz
+DURATION = 100. # second
 
 
 def get_random_number(distribution, shape):
@@ -232,10 +232,10 @@ class ArtificialDataset(object):
         print '\n'.join([str(p) for p in motion_trace])
 
         for i, curr_motion in enumerate(motion_trace):
-            curr_x = self._motion.get_max_height_pix() + curr_motion[0]
-            curr_y = self._motion.get_max_width_pix() + curr_motion[1]
-            mov[i, :, :] = large_mov[i, :, :][curr_x:curr_x + self._frame_shape[0],
-                                              curr_y:curr_y + self._frame_shape[1]]
+            curr_x = self._motion.get_max_width_pix() + curr_motion[0]
+            curr_y = self._motion.get_max_height_pix() + curr_motion[1]
+            mov[i, :, :] = large_mov[i, :, :][curr_y:curr_y + self._frame_shape[0],
+                                              curr_x:curr_x + self._frame_shape[1]]
 
         if np.issubdtype(self._dtype, np.integer):
             mov.clip(min=np.iinfo(self._dtype).min, max=np.iinfo(self._dtype).max)
@@ -246,7 +246,7 @@ class ArtificialDataset(object):
 
         mov = mov.astype(self._dtype)
 
-        dfile.create_dataset('final_movie', data=mov)
+        dfile.create_dataset('final_movie', data=mov, compression='lzf')
 
         dfile.close()
 
@@ -1541,10 +1541,10 @@ class MotionTrace(TemporalComponent):
                'PossionCalciumTrace class inherited from stia.artificial_dataset.TemporalComponent class.'
 
     def get_max_height_pix(self):
-        return self._amplitude / self._pixel_size[0]
+        return int(self._amplitude / self._pixel_size[0])
 
     def get_max_width_pix(self):
-        return self._amplitude / self._pixel_size[1]
+        return int(self._amplitude / self._pixel_size[1])
 
     def _generate_motion_onsets(self):
         """
@@ -1762,7 +1762,7 @@ class SpatialTemporalNoiseComponent(object):
         mov = self.generate_movie()
 
         movie_group = h5_group.create_group('movie')
-        movie_group.create_dataset('movie', data=mov)
+        movie_group.create_dataset('movie', data=mov, compression='lzf')
 
         return mov
 
@@ -1786,7 +1786,7 @@ def run():
     cell_number = 0
 
     # add 3 filled soma
-    filled_soma_num = 5
+    filled_soma_num = 3
     for i in range(filled_soma_num):
         name = 'cell' + bas.int2str(cell_number, 4)
         center = (random.choice(range(20, dset.get_frame_shape()[0]-20)),
@@ -1799,7 +1799,7 @@ def run():
         cell_number += 1
 
     # add 3 filled soma with processes
-    filled_soma_process_num = 1
+    filled_soma_process_num = 3
     for i in range(filled_soma_process_num):
         name = 'cell' + bas.int2str(cell_number, 4)
         center = (random.choice(range(20, dset.get_frame_shape()[0] - 20)),
@@ -1828,7 +1828,7 @@ def run():
         cell_number += 1
 
     # add 3 doughnut soma with processes
-    doughnut_soma_process_num = 2
+    doughnut_soma_process_num = 3
     for i in range(doughnut_soma_process_num):
         name = 'cell' + bas.int2str(cell_number, 4)
         center = (random.choice(range(20, dset.get_frame_shape()[0] - 20)),
