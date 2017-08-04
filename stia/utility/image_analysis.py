@@ -20,9 +20,9 @@ def find_border(pixel_ind, frame_shape=(128, 128)):
     :param frame_shape: shape of the whole frame, (height, width)
     :return: pixel indices of the border
     """
-    mask = np.zeros(frame_shape, dtype=np.bool)
-    mask[pixel_ind] = True
-    big_mask = ni.binary_dilation(mask)
+    mask = np.zeros(frame_shape, dtype=np.uint8)
+    mask[pixel_ind] = 1
+    big_mask = ni.binary_dilation(mask).astype(np.uint8)
     border = big_mask - mask
     return np.where(border)
 

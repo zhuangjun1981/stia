@@ -98,30 +98,30 @@ class ArtificialDataset(object):
     # @property
     # def _motion_max_width_pix(self):
     #     return self._motion_amplitude / self._pixel_size[1]
-
-    def _get_motion_traces(self):
-        """
-        get motion in x and y
-        :return: a list of tuple, each tuple is x and y translation of motion
-        """
-
-        motion_height = TemporalFrequencyTrace(fs=TEMPORAL_SAMPLING_RATE, duration=self._duration,
-                                               peak_dff=self._motion_max_height_pix * 2, noise=None,
-                                               cutoff_freq_low=self._motion_cutoff_freq_low,
-                                               cutoff_freq_high=self._motion_cutoff_freq_high, filter_mode='box')
-
-        motion_height_trace = (motion_height.generate_trace() - self._motion_max_height_pix).astype(np.int)
-
-        motion_width = TemporalFrequencyTrace(fs=TEMPORAL_SAMPLING_RATE, duration=self._duration,
-                                              peak_dff=self._motion_max_width_pix * 2, noise=None,
-                                              cutoff_freq_low=self._motion_cutoff_freq_low,
-                                              cutoff_freq_high=self._motion_cutoff_freq_high, filter_mode='box')
-
-        motion_width_trace = (motion_width.generate_trace() - self._motion_max_width_pix).astype(np.int)
-
-        print motion_width_trace.shape
-
-        return zip(motion_height_trace, motion_width_trace)
+    #
+    # def _get_motion_traces(self):
+    #     """
+    #     get motion in x and y
+    #     :return: a list of tuple, each tuple is x and y translation of motion
+    #     """
+    #
+    #     motion_height = TemporalFrequencyTrace(fs=TEMPORAL_SAMPLING_RATE, duration=self._duration,
+    #                                            peak_dff=self._motion_max_height_pix * 2, noise=None,
+    #                                            cutoff_freq_low=self._motion_cutoff_freq_low,
+    #                                            cutoff_freq_high=self._motion_cutoff_freq_high, filter_mode='box')
+    #
+    #     motion_height_trace = (motion_height.generate_trace() - self._motion_max_height_pix).astype(np.int)
+    #
+    #     motion_width = TemporalFrequencyTrace(fs=TEMPORAL_SAMPLING_RATE, duration=self._duration,
+    #                                           peak_dff=self._motion_max_width_pix * 2, noise=None,
+    #                                           cutoff_freq_low=self._motion_cutoff_freq_low,
+    #                                           cutoff_freq_high=self._motion_cutoff_freq_high, filter_mode='box')
+    #
+    #     motion_width_trace = (motion_width.generate_trace() - self._motion_max_width_pix).astype(np.int)
+    #
+    #     print motion_width_trace.shape
+    #
+    #     return zip(motion_height_trace, motion_width_trace)
 
     def get_frame_shape(self):
         return self._frame_shape
@@ -223,13 +223,13 @@ class ArtificialDataset(object):
                 raise (ValueError, 'component ' + name + ': fs inconsistent with dataset fs!')
 
             curr_group = dfile.create_group(name)
-            large_mov += component.to_h5(curr_group)
+            large_mov += component.to_h5(curr_group, dtype=self._dtype)
 
         mov = np.zeros((self._total_frame_num, self._frame_shape[0], self._frame_shape[1]))
 
         motion_group = dfile.create_group('motion')
         motion_trace = self._motion.to_h5(motion_group)
-        print '\n'.join([str(p) for p in motion_trace])
+        # print '\n'.join([str(p) for p in motion_trace])
 
         for i, curr_motion in enumerate(motion_trace):
             curr_x = self._motion.get_max_width_pix() + curr_motion[0]
@@ -398,7 +398,7 @@ class FilledSoma(SpatialComponent):
         """
         generate a hdf5 group for saving
         """
-        
+
         super(FilledSoma, self).to_h5(h5_group)
 
         h5_group.attrs['type'] = self.__str__()
@@ -1573,7 +1573,7 @@ class MotionTrace(TemporalComponent):
         sigma_point = self._temporal_filter_sigma * self._fs
 
         trace_height = trace_height + get_random_number(self._noise, trace_height.shape)
-        trace_width = trace_height + get_random_number(self._noise, trace_width.shape)
+        trace_width = trace_width + get_random_number(self._noise, trace_width.shape)
 
         trace_height = ni.gaussian_filter1d(trace_height, sigma_point)
         trace_width = ni.gaussian_filter1d(trace_width, sigma_point)
@@ -1590,6 +1590,7 @@ class MotionTrace(TemporalComponent):
         h5_group.attrs['amplitude_micron'] = self._amplitude
         h5_group.attrs['rate_hz'] = self._rate
         h5_group.attrs['temporal_filter_sigma'] = self._temporal_filter_sigma
+        h5_group.attrs['format'] = ['row', 'col']
 
         trace = self.generate_trace()
         trace_group = h5_group.create_group('trace')
@@ -1685,7 +1686,7 @@ class SpatialTemporalNoiseComponent(object):
     def get_fs(self):
         return self._fs
 
-    def generate_movie(self, is_plot=False):
+    def generate_movie(self, dtype=DTYPE):
 
         mov_raw = np.random.rand(self._total_point_num, self._frame_shape[0], self._frame_shape[1])
 
@@ -1723,13 +1724,9 @@ class SpatialTemporalNoiseComponent(object):
 
         mov = (mov + 1.) * self._baseline
 
-        if is_plot:
-            tf.imshow(mov, cmap='gray')
-            plt.show()
+        return mov.astype(dtype)
 
-        return mov
-
-    def to_h5(self, h5_group):
+    def to_h5(self, h5_group, dtype=DTYPE):
         """
         generate a hdf5 group for saving
         """
@@ -1759,7 +1756,7 @@ class SpatialTemporalNoiseComponent(object):
         h5_group.attrs['noise_err_dff'] = self._noise[2]
         h5_group.attrs['baseline'] = self._baseline
 
-        mov = self.generate_movie()
+        mov = self.generate_movie(dtype=dtype)
 
         movie_group = h5_group.create_group('movie')
         movie_group.create_dataset('movie', data=mov, compression='lzf')
@@ -1861,7 +1858,7 @@ def run():
 
 if __name__ == "__main__":
 
-    run()
+    # run()
 
     # -----------------------------------------------------------------
     # filled_neuron = FilledSoma(frame_shape=FRAME_SHAPE, center=(23, 46))
@@ -1881,10 +1878,11 @@ if __name__ == "__main__":
     # -----------------------------------------------------------------
 
     # -----------------------------------------------------------------
-    # calcium1 = PossionCalciumTrace()
-    # _ = calcium1.generate_irf(is_plot=True)
-    # _ = calcium1.generate_spike_train(is_plot=True)
-    # calcium1.generate_trace(is_plot=True)
+    calcium1 = PossionCalciumTrace(amplitude=1.3, noise=('gaussian', 0., 0.01), firing_rate=1.8, delay=0.05,
+                                   rising_dur=0.2, decaying_tau=2.)
+    _ = calcium1.generate_irf(is_plot=True)
+    _ = calcium1.generate_spike_train(is_plot=True)
+    calcium1.generate_trace(is_plot=True)
     # -----------------------------------------------------------------
 
     # -----------------------------------------------------------------
